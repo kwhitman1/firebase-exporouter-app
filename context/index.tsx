@@ -5,13 +5,14 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
+import { router } from "expo-router";
 import {
   getCurrentUser,
   login,
   logout,
   register,
 } from "@/lib/firebase-service";
-import { auth } from "@/lib/firebase-config";
+import { getFirebaseAuth } from "@/lib/firebase-config";
 
 // ============================================================================
 // Types & Interfaces
@@ -123,13 +124,19 @@ export function SessionProvider(props: { children: React.ReactNode }) {
    * Automatically updates user state on auth changes
    */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setIsLoading(false);
-    });
+    try {
+      const auth = getFirebaseAuth();
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        setUser(user);
+        setIsLoading(false);
+      });
 
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
+      // Cleanup subscription on unmount
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("[SessionProvider] failed to init auth subscription", e);
+      setIsLoading(false);
+    }
   }, []);
 
   // ============================================================================
@@ -180,7 +187,14 @@ export function SessionProvider(props: { children: React.ReactNode }) {
   const handleSignOut = async () => {
     try {
       await logout();
+      // clear local user state and navigate back to sign-in
       setUser(null);
+      try {
+        router.replace("/sign-in");
+      } catch (e) {
+        // router may not be ready in some contexts; log but continue
+        console.warn("[handleSignOut] router.replace failed", e);
+      }
     } catch (error) {
       console.error("[handleSignOut error] ==>", error);
     }

@@ -4,15 +4,19 @@
  * @module
  */
 
-import { 
+import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
   updateProfile,
   User,
-  UserCredential
+  UserCredential,
+  onAuthStateChanged,
 } from 'firebase/auth';
-import { auth } from './firebase-config';
+import { getFirebaseAuth } from './firebase-config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import app from './firebase-config';
 
 // ============================================================================
 // Types & Interfaces
@@ -38,8 +42,9 @@ export interface FirebaseUserResponse {
  */
 export const getCurrentUser = async () => {
   try {
-    return new Promise((resolve) => {
-      const unsubscribe = auth.onAuthStateChanged((user) => {
+    return new Promise(async (resolve) => {
+      const auth = getFirebaseAuth();
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
         unsubscribe();
         resolve(user ? { user } : null);
       });
@@ -62,11 +67,18 @@ export async function login(
   password: string
 ): Promise<FirebaseUserResponse | undefined> {
   try {
+    const auth = getFirebaseAuth();
     const userCredential: UserCredential = await signInWithEmailAndPassword(
-      auth, 
-      email, 
+      auth,
+      email,
       password
     );
+    try {
+      const token = await userCredential.user.getIdToken();
+      await AsyncStorage.setItem('firebaseToken', token);
+    } catch (e) {
+      console.warn('[login] failed to persist token', e);
+    }
     return { user: userCredential.user };
   } catch (e) {
     console.error("[error logging in] ==>", e);
@@ -81,7 +93,13 @@ export async function login(
  */
 export async function logout(): Promise<void> {
   try {
+    const auth = getFirebaseAuth();
     await signOut(auth);
+    try {
+      await AsyncStorage.removeItem('firebaseToken');
+    } catch (e) {
+      console.warn('[logout] failed to clear token', e);
+    }
   } catch (e) {
     console.error("[error logging out] ==>", e);
     throw e;
@@ -102,9 +120,26 @@ export async function register(
   name?: string
 ): Promise<FirebaseUserResponse | undefined> {
   try {
+    const auth = getFirebaseAuth();
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     if (name) {
       await updateProfile(userCredential.user, { displayName: name });
+    }
+    try {
+      const token = await userCredential.user.getIdToken();
+      await AsyncStorage.setItem('firebaseToken', token);
+    } catch (e) {
+      console.warn('[register] failed to persist token', e);
+    }
+    try {
+      const db = getFirestore(app);
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        name: name || null,
+        email: userCredential.user.email || null,
+        createdAt: new Date(),
+      });
+    } catch (e) {
+      console.warn('[register] failed to create users doc', e);
     }
     return { user: userCredential.user };
   } catch (e) {

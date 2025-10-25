@@ -1,5 +1,6 @@
-import { Redirect, useRouter } from "expo-router";
+import { Redirect } from "expo-router";
 
 export default function Index() {
-  return <Redirect href="/(app)/(drawer)/(tabs)/" />;
+  // Remove trailing slash to match expo-router Href types
+  return <Redirect href="/(app)/(drawer)/(tabs)" />;
 }

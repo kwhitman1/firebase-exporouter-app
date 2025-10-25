@@ -16,6 +16,9 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const { signUp } = useSession();
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // ============================================================================
   // Handlers
@@ -27,7 +30,8 @@ export default function SignUp() {
    */
   const handleRegister = async () => {
     try {
-      return await signUp(email, password, name);
+  // pass trimmed name to avoid leading/trailing whitespace being stored
+  return await signUp(email, password, name.trim());
     } catch (err) {
       console.log("[handleRegister] ==>", err);
       return null;
@@ -38,9 +42,32 @@ export default function SignUp() {
    * Handles the sign-up button press
    */
   const handleSignUpPress = async () => {
-    const resp = await handleRegister();
-    if (resp) {
-      router.replace("/(app)/(drawer)/(tabs)/");
+    setError(null);
+    // validate name
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setError("Please enter your full name (at least 2 characters).");
+      return;
+    }
+
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const resp = await handleRegister();
+      if (resp) {
+        router.replace("/(app)/(drawer)/(tabs)" as any);
+      } else {
+        setError("Registration failed. Please try again.");
+      }
+    } catch (e: any) {
+      const code = e?.code || e?.message;
+      if (code === "auth/email-already-in-use") setError("Email already in use.");
+      else setError("Registration failed. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -104,6 +131,20 @@ export default function SignUp() {
             className="w-full p-3 border border-gray-300 rounded-lg text-base bg-white"
           />
         </View>
+
+        <View>
+          <Text className="text-sm font-medium text-gray-700 mb-1 ml-1">
+            Confirm Password
+          </Text>
+          <TextInput
+            placeholder="Confirm password"
+            value={confirm}
+            onChangeText={setConfirm}
+            secureTextEntry
+            textContentType="newPassword"
+            className="w-full p-3 border border-gray-300 rounded-lg text-base bg-white"
+          />
+        </View>
       </View>
 
       {/* Sign Up Button */}
@@ -112,9 +153,11 @@ export default function SignUp() {
         className="bg-blue-600 w-full max-w-[300px] py-3 rounded-lg active:bg-blue-700"
       >
         <Text className="text-white font-semibold text-base text-center">
-          Sign Up
+      {isLoading ? "Creating..." : "Sign Up"}
         </Text>
       </Pressable>
+
+    {error ? <Text className="text-red-600 mt-4">{error}</Text> : null}
 
       {/* Sign In Link */}
       <View className="flex-row items-center mt-6">

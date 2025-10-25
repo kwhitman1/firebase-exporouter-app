@@ -15,6 +15,8 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { signIn } = useSession();
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // ============================================================================
   // Handlers
@@ -37,8 +39,25 @@ export default function SignIn() {
    * Handles the sign-in button press
    */
   const handleSignInPress = async () => {
-    const resp = await handleLogin();
-    router.replace("/(app)/(drawer)/(tabs)/");
+    setError(null);
+    setIsLoading(true);
+    try {
+      const resp = await handleLogin();
+      if (resp) {
+        router.replace("/(app)/(drawer)/(tabs)/" as any);
+      } else {
+        setError("Invalid credentials — please check your email and password.");
+      }
+    } catch (e: any) {
+      console.log("[handleSignInPress] ==>", e);
+      const code = e?.code || e?.message;
+      if (code === "auth/user-not-found") setError("No account found for that email.");
+      else if (code === "auth/wrong-password") setError("Incorrect password.");
+      else if (code === "auth/invalid-email") setError("Please enter a valid email address.");
+      else setError("Authentication failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // ============================================================================
@@ -89,15 +108,21 @@ export default function SignIn() {
         </View>
       </View>
 
-      {/* Sign In Button */}
+      
       <Pressable
         onPress={handleSignInPress}
+        disabled={isLoading}
         className="bg-blue-600 w-full max-w-[300px] py-3 rounded-lg active:bg-blue-700"
       >
         <Text className="text-white font-semibold text-base text-center">
-          Sign In
+          {isLoading ? "Signing in..." : "Sign In"}
         </Text>
       </Pressable>
+
+  
+      {error ? (
+        <Text className="text-red-600 mt-4">{error}</Text>
+      ) : null}
 
       {/* Sign Up Link */}
       <View className="flex-row items-center mt-6">

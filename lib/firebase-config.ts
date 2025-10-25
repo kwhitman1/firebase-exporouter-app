@@ -4,10 +4,7 @@
  * @module
  */
 import { initializeApp } from "firebase/app";
-
-// IGNORE IMPORT ERROR, this is a valid import, still investigating
-import { initializeAuth, getReactNativePersistence } from "firebase/auth";
-import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
+import type { Auth } from "firebase/auth";
 
 // ============================================================================
 // Configuration
@@ -36,13 +33,48 @@ const firebaseConfig = {
  */
 const app = initializeApp(firebaseConfig);
 
-/**
- * Initialize Firebase Authentication service
- * @type {Auth}
- */
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-});
+// Lazy-initialized Auth instance. We avoid importing or calling
+// native-only APIs at module evaluation time to prevent runtime
+// errors in the bundler (for example: "Component auth has not been registered yet").
+let _auth: Auth | null = null;
 
-export { auth };
+/**
+ * Returns a Firebase Auth instance, initializing it on first call.
+ * - On React Native, attempts to use initializeAuth with
+ *   getReactNativePersistence(AsyncStorage).
+ * - Falls back to getAuth(app) when native persistence isn't available
+ *   (e.g. web or when AsyncStorage cannot be required).
+ */
+export function getFirebaseAuth(): Auth {
+  if (_auth) return _auth as Auth;
+
+  try {
+    // Dynamic require to avoid touching native modules during module eval.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const firebaseAuth = require("firebase/auth");
+    const { getAuth, initializeAuth, getReactNativePersistence } = firebaseAuth;
+
+    try {
+      // Try to require React Native AsyncStorage at runtime. If that fails
+      // (web or not installed) we'll fall back to getAuth.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+
+      if (typeof initializeAuth === "function" && typeof getReactNativePersistence === "function") {
+  _auth = initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
+  return _auth as Auth;
+      }
+    } catch (innerErr) {
+      // AsyncStorage or native persistence not available; fall through to getAuth
+    }
+
+    // Fallback for web and other environments.
+  _auth = getAuth(app);
+  return _auth as Auth;
+  } catch (err) {
+    // Surface the error so callers can handle it. This should be rare.
+    throw err;
+  }
+}
+
 export default app;
